@@ -1,0 +1,117 @@
+version: 3
+systemUnderTest:
+  service:
+    $ref: "#/components/services/webBff"
+    runOptions:
+      graphqlsdl:
+        host: localhost
+        port: 4000
+dependencies:
+  services:
+    - service:
+        $ref: "#/components/services/customerService"
+        runOptions:
+          $ref: "#/components/runOptions/customerServiceMock"
+    - service:
+        $ref: "#/components/services/catalogService"
+        runOptions:
+          $ref: "#/components/runOptions/catalogServiceMock"
+    - service:
+        $ref: "#/components/services/orderService"
+        runOptions:
+          $ref: "#/components/runOptions/orderServiceMock"
+    - service:
+        $ref: "#/components/services/pricingService"
+        runOptions:
+          $ref: "#/components/runOptions/pricingServiceMock"
+    - service:
+        $ref: "#/components/services/notificationService"
+        runOptions:
+          $ref: "#/components/runOptions/notificationServiceMock"
+components:
+  sources:
+    centralContractRepo:
+      git:
+        url: https://github.com/specmatic-demo/central-contract-repository
+  services:
+    webBff:
+      description: "Web BFF"
+      definitions:
+        - definition:
+            source:
+              $ref: "#/components/sources/centralContractRepo"
+            specs:
+              - spec:
+                  path: "contracts/services/web-bff/graphql/schema.graphql"
+    customerService:
+      description: "Customer Service dependency"
+      definitions:
+        - definition:
+            source:
+              $ref: "#/components/sources/centralContractRepo"
+            specs:
+              - spec:
+                  path: "contracts/services/customer-service/http/openapi.yaml"
+    catalogService:
+      description: "Catalog Service dependency"
+      definitions:
+        - definition:
+            source:
+              $ref: "#/components/sources/centralContractRepo"
+            specs:
+              - spec:
+                  path: "contracts/services/catalog-service/http/openapi.yaml"
+    orderService:
+      description: "Order Service dependency"
+      definitions:
+        - definition:
+            source:
+              $ref: "#/components/sources/centralContractRepo"
+            specs:
+              - spec:
+                  path: "contracts/services/order-service/http/openapi.yaml"
+    pricingService:
+      description: "Pricing Service dependency"
+      definitions:
+        - definition:
+            source:
+              $ref: "#/components/sources/centralContractRepo"
+            specs:
+              - spec:
+                  path: "contracts/services/pricing-service/rpc/pricing.proto"
+    notificationService:
+      description: "Notification Service dependency"
+      definitions:
+        - definition:
+            source:
+              $ref: "#/components/sources/centralContractRepo"
+            specs:
+              - spec:
+                  path: "contracts/services/notification-service/events/mqtt-asyncapi.yaml"
+  runOptions:
+    customerServiceMock:
+      openapi:
+        type: mock
+        port: 5101
+        host: localhost
+    catalogServiceMock:
+      openapi:
+        type: mock
+        port: 5102
+        host: localhost
+    orderServiceMock:
+      openapi:
+        type: mock
+        port: 5103
+        host: localhost
+    pricingServiceMock:
+      protobuf:
+        type: mock
+        port: 5104
+        host: localhost
+    notificationServiceMock:
+      asyncapi:
+        type: mock
+        servers:
+          - host: "localhost:5105"
+            protocol: mqtt
