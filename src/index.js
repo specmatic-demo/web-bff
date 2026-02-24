@@ -221,6 +221,7 @@ async function publishUserNotification(payload) {
   const client = await getMqttClient();
 
   return new Promise((resolve, reject) => {
+    console.log(`[publish-notification] requestId=${payload.requestId} title="${payload.title}" body="${payload.body}" priority=${payload.priority}`);
     client.publish('notification/user', JSON.stringify(payload), { qos: 1 }, (error) => {
       if (error) {
         logDependencyError('notificationService', config.notificationBrokerUrl, error, {
