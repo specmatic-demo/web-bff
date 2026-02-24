@@ -3,5 +3,10 @@ services:
     image: eclipse-mosquitto:2
     container_name: web-bff-mqtt
     restart: unless-stopped
-    ports:
-      - "5105:1883"
+    network_mode: host
+
+  my-app:
+    build: .
+    container_name: web-bff
+    restart: unless-stopped
+    network_mode: host

@@ -50,6 +50,8 @@ if (!schemaPath) {
   throw new Error('Could not find GraphQL schema file. Set BFF_SCHEMA_PATH if needed.');
 }
 
+console.log(`Using GraphQL schema from ${schemaPath}`);
+
 const pricingProtoPath = findFirstExistingPath([
   process.env.PRICING_PROTO_PATH,
   path.join(
@@ -85,7 +87,7 @@ const schemaSource = fs.readFileSync(schemaPath, 'utf8');
 const schema = buildSchema(schemaSource);
 
 const config = {
-  host: process.env.BFF_HOST || 'localhost',
+  host: process.env.BFF_HOST || '0.0.0.0',
   port: Number.parseInt(process.env.BFF_PORT || '4000', 10),
   customerServiceBaseUrl: process.env.CUSTOMER_SERVICE_BASE_URL || 'http://localhost:5101',
   catalogServiceBaseUrl: process.env.CATALOG_SERVICE_BASE_URL || 'http://localhost:5102',
@@ -93,6 +95,19 @@ const config = {
   pricingServiceAddress: process.env.PRICING_SERVICE_ADDRESS || 'localhost:5104',
   notificationBrokerUrl: process.env.NOTIFICATION_BROKER_URL || 'mqtt://localhost:1883'
 };
+
+function logDependencyError(dependency, endpoint, error, context = {}) {
+  const message = error && error.message ? error.message : String(error);
+  console.error(
+    `[dependency-error] dependency=${dependency} endpoint=${endpoint} message="${message}" context=${JSON.stringify(
+      context
+    )}`
+  );
+}
+
+console.log(
+  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, pricing=${config.pricingServiceAddress}, mqtt=${config.notificationBrokerUrl}`
+);
 
 const pricingPackageDef = protoLoader.loadSync(pricingProtoPath, {
   keepCase: false,
@@ -121,12 +136,24 @@ function getMqttClient() {
   mqttReadyPromise = new Promise((resolve, reject) => {
     const client = mqtt.connect(config.notificationBrokerUrl);
 
+    client.on('reconnect', () => {
+      console.warn(`[dependency-warning] dependency=notificationService endpoint=${config.notificationBrokerUrl} reconnecting`);
+    });
+
+    client.on('offline', () => {
+      console.warn(`[dependency-warning] dependency=notificationService endpoint=${config.notificationBrokerUrl} offline`);
+    });
+
     client.once('connect', () => {
+      console.log(`[dependency-connected] dependency=notificationService endpoint=${config.notificationBrokerUrl}`);
       mqttClient = client;
       resolve(client);
     });
 
     client.once('error', (error) => {
+      logDependencyError('notificationService', config.notificationBrokerUrl, error, {
+        phase: 'connect'
+      });
       reject(error);
     });
   });
@@ -135,13 +162,23 @@ function getMqttClient() {
 }
 
 async function httpJson(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'content-type': 'application/json',
-      ...(options.headers || {})
-    }
-  });
+  let response;
+
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        'content-type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+  } catch (error) {
+    logDependencyError('httpDependency', url, error, {
+      method: options.method || 'GET',
+      phase: 'connect'
+    });
+    throw error;
+  }
 
   if (!response.ok) {
     let details = '';
@@ -151,7 +188,13 @@ async function httpJson(url, options = {}) {
       details = '';
     }
 
-    throw new Error(`Upstream call failed (${response.status}) for ${url}${details ? `: ${details}` : ''}`);
+    const error = new Error(`Upstream call failed (${response.status}) for ${url}${details ? `: ${details}` : ''}`);
+    logDependencyError('httpDependency', url, error, {
+      method: options.method || 'GET',
+      phase: 'response',
+      status: response.status
+    });
+    throw error;
   }
 
   return response.json();
@@ -161,6 +204,10 @@ function quotePriceGrpc(request) {
   return new Promise((resolve, reject) => {
     pricingClient.quotePrice(request, (error, response) => {
       if (error) {
+        logDependencyError('pricingService', config.pricingServiceAddress, error, {
+          method: 'QuotePrice',
+          request
+        });
         reject(error);
         return;
       }
@@ -176,6 +223,11 @@ async function publishUserNotification(payload) {
   return new Promise((resolve, reject) => {
     client.publish('notification/user', JSON.stringify(payload), { qos: 1 }, (error) => {
       if (error) {
+        logDependencyError('notificationService', config.notificationBrokerUrl, error, {
+          phase: 'publish',
+          topic: 'notification/user',
+          requestId: payload.requestId
+        });
         reject(error);
         return;
       }
@@ -269,6 +321,23 @@ const rootValue = {
 };
 
 const app = express();
+
+app.use((req, res, next) => {
+  const requestId = randomUUID();
+  const startedAt = Date.now();
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  console.log(
+    `[incoming-request] id=${requestId} method=${req.method} path=${req.originalUrl} ip=${ip}`
+  );
+
+  res.on('finish', () => {
+    console.log(
+      `[request-complete] id=${requestId} method=${req.method} path=${req.originalUrl} status=${res.statusCode} durationMs=${Date.now() - startedAt}`
+    );
+  });
+
+  next();
+});
 
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
