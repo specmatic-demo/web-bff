@@ -246,12 +246,16 @@ const rootValue = {
 
   catalogItems: async ({ category, limit = 10 }) => {
     const params = new URLSearchParams();
+    const parsedLimit = Number.parseInt(String(limit), 10);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.min(100, Math.max(1, parsedLimit))
+      : 10;
 
     if (category) {
       params.set('category', category);
     }
 
-    params.set('limit', String(limit));
+    params.set('limit', String(safeLimit));
 
     const url = `${config.catalogServiceBaseUrl}/catalog/items?${params.toString()}`;
     return httpJson(url, { method: 'GET' });
