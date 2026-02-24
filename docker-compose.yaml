@@ -1,0 +1,7 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: web-bff-mqtt
+    restart: unless-stopped
+    ports:
+      - "5105:1883"

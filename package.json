@@ -1,0 +1,21 @@
+{
+  "name": "web-bff",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js GraphQL BFF composed from Specmatic dependency contracts",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.13.4",
+    "@grpc/proto-loader": "^0.8.0",
+    "express": "^4.21.2",
+    "graphql": "^16.11.0",
+    "graphql-http": "^1.22.4",
+    "mqtt": "^5.14.1"
+  }
+}

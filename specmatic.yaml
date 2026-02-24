@@ -109,9 +109,10 @@ components:
         type: mock
         port: 5104
         host: localhost
+        protocVersion: "3.23.4"
     notificationServiceMock:
       asyncapi:
         type: mock
         servers:
-          - host: "localhost:5105"
+          - host: tcp://0.0.0.0:5105
             protocol: mqtt
