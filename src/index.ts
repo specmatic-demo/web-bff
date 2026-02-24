@@ -1,15 +1,68 @@
-const fs = require('fs');
-const path = require('path');
-const { randomUUID } = require('crypto');
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as grpc from '@grpc/grpc-js';
+import * as protoLoader from '@grpc/proto-loader';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import { buildSchema } from 'graphql';
+import { createHandler } from 'graphql-http/lib/use/express';
+import mqtt from 'mqtt';
 
-const express = require('express');
-const { buildSchema } = require('graphql');
-const { createHandler } = require('graphql-http/lib/use/express');
-const grpc = require('@grpc/grpc-js');
-const protoLoader = require('@grpc/proto-loader');
-const mqtt = require('mqtt');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-function findFirstExistingPath(paths) {
+type JsonObject = Record<string, unknown>;
+
+type DependencyErrorContext = Record<string, unknown>;
+
+type QuotePriceRequest = {
+  sku: string;
+  quantity: number;
+  customerTier: string;
+};
+
+type QuotePriceResponse = {
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  currency: string;
+};
+
+type CustomerRecord = {
+  id: string;
+  email: string;
+  tier: string;
+};
+
+type PlaceOrderInput = {
+  customerId: string;
+  sku: string;
+  quantity: number;
+  paymentMethodId: string;
+};
+
+type OrderRecord = {
+  id: string;
+  status: string;
+};
+
+type UserNotification = {
+  notificationId: string;
+  requestId: string;
+  title: string;
+  body: string;
+  priority: 'LOW' | 'NORMAL' | 'HIGH';
+};
+
+type GraphQLCustomerArgs = { id: string };
+type GraphQLCatalogItemsArgs = { category?: string | null; limit?: number | null };
+type GraphQLOrderArgs = { id: string };
+type GraphQLQuotePriceArgs = { sku: string; quantity: number };
+type GraphQLPlaceOrderArgs = { input: PlaceOrderInput };
+
+function findFirstExistingPath(paths: Array<string | undefined>): string | null {
   for (const candidate of paths) {
     if (candidate && fs.existsSync(candidate)) {
       return candidate;
@@ -96,7 +149,12 @@ const config = {
   notificationBrokerUrl: process.env.NOTIFICATION_BROKER_URL || 'mqtt://localhost:1883'
 };
 
-function logDependencyError(dependency, endpoint, error, context = {}) {
+function logDependencyError(
+  dependency: string,
+  endpoint: string,
+  error: unknown,
+  context: DependencyErrorContext = {}
+): void {
   const message = error && error.message ? error.message : String(error);
   console.error(
     `[dependency-error] dependency=${dependency} endpoint=${endpoint} message="${message}" context=${JSON.stringify(
@@ -121,10 +179,10 @@ const pricingProto = grpc.loadPackageDefinition(pricingPackageDef);
 const PricingServiceClient = pricingProto.pricing.v1.PricingService;
 const pricingClient = new PricingServiceClient(config.pricingServiceAddress, grpc.credentials.createInsecure());
 
-let mqttClient;
-let mqttReadyPromise;
+let mqttClient: mqtt.MqttClient | undefined;
+let mqttReadyPromise: Promise<mqtt.MqttClient> | undefined;
 
-function getMqttClient() {
+function getMqttClient(): Promise<mqtt.MqttClient> {
   if (mqttClient) {
     return Promise.resolve(mqttClient);
   }
@@ -150,7 +208,7 @@ function getMqttClient() {
       resolve(client);
     });
 
-    client.once('error', (error) => {
+    client.once('error', (error: Error) => {
       logDependencyError('notificationService', config.notificationBrokerUrl, error, {
         phase: 'connect'
       });
@@ -161,7 +219,7 @@ function getMqttClient() {
   return mqttReadyPromise;
 }
 
-async function httpJson(url, options = {}) {
+async function httpJson(url: string, options: RequestInit = {}): Promise<JsonObject> {
   let response;
 
   try {
@@ -172,7 +230,7 @@ async function httpJson(url, options = {}) {
         ...(options.headers || {})
       }
     });
-  } catch (error) {
+  } catch (error: unknown) {
     logDependencyError('httpDependency', url, error, {
       method: options.method || 'GET',
       phase: 'connect'
@@ -184,7 +242,7 @@ async function httpJson(url, options = {}) {
     let details = '';
     try {
       details = await response.text();
-    } catch (error) {
+    } catch (_error: unknown) {
       details = '';
     }
 
@@ -200,9 +258,9 @@ async function httpJson(url, options = {}) {
   return response.json();
 }
 
-function quotePriceGrpc(request) {
+function quotePriceGrpc(request: QuotePriceRequest): Promise<QuotePriceResponse> {
   return new Promise((resolve, reject) => {
-    pricingClient.quotePrice(request, (error, response) => {
+    pricingClient.quotePrice(request, (error: Error | null, response: QuotePriceResponse) => {
       if (error) {
         logDependencyError('pricingService', config.pricingServiceAddress, error, {
           method: 'QuotePrice',
@@ -217,12 +275,12 @@ function quotePriceGrpc(request) {
   });
 }
 
-async function publishUserNotification(payload) {
+async function publishUserNotification(payload: UserNotification): Promise<void> {
   const client = await getMqttClient();
 
   return new Promise((resolve, reject) => {
     console.log(`[publish-notification] requestId=${payload.requestId} title="${payload.title}" body="${payload.body}" priority=${payload.priority}`);
-    client.publish('notification/user', JSON.stringify(payload), { qos: 1 }, (error) => {
+    client.publish('notification/user', JSON.stringify(payload), { qos: 1 }, (error?: Error) => {
       if (error) {
         logDependencyError('notificationService', config.notificationBrokerUrl, error, {
           phase: 'publish',
@@ -239,13 +297,13 @@ async function publishUserNotification(payload) {
 }
 
 const rootValue = {
-  customer: async ({ id }) => {
+  customer: async ({ id }: GraphQLCustomerArgs) => {
     return httpJson(`${config.customerServiceBaseUrl}/customers/${encodeURIComponent(id)}`, {
       method: 'GET'
     });
   },
 
-  catalogItems: async ({ category, limit = 10 }) => {
+  catalogItems: async ({ category, limit = 10 }: GraphQLCatalogItemsArgs) => {
     const params = new URLSearchParams();
     const parsedLimit = Number.parseInt(String(limit), 10);
     const safeLimit = Number.isFinite(parsedLimit)
@@ -262,13 +320,13 @@ const rootValue = {
     return httpJson(url, { method: 'GET' });
   },
 
-  order: async ({ id }) => {
+  order: async ({ id }: GraphQLOrderArgs) => {
     return httpJson(`${config.orderServiceBaseUrl}/orders/${encodeURIComponent(id)}`, {
       method: 'GET'
     });
   },
 
-  quotePrice: async ({ sku, quantity }) => {
+  quotePrice: async ({ sku, quantity }: GraphQLQuotePriceArgs) => {
     const quote = await quotePriceGrpc({
       sku,
       quantity,
@@ -283,7 +341,7 @@ const rootValue = {
     };
   },
 
-  placeOrder: async ({ input }) => {
+  placeOrder: async ({ input }: GraphQLPlaceOrderArgs) => {
     const customer = await httpJson(
       `${config.customerServiceBaseUrl}/customers/${encodeURIComponent(input.customerId)}`,
       { method: 'GET' }
@@ -327,7 +385,7 @@ const rootValue = {
 
 const app = express();
 
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   const requestId = randomUUID();
   const startedAt = Date.now();
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
@@ -344,7 +402,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', (_req, res) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok' });
 });
 

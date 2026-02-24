@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Node.js GraphQL BFF composed from Specmatic dependency contracts",
-  "main": "src/index.js",
+  "main": "src/index.ts",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "tsx src/index.ts"
   },
   "engines": {
     "node": ">=18"
@@ -16,6 +16,11 @@
     "express": "^4.21.2",
     "graphql": "^16.11.0",
     "graphql-http": "^1.22.4",
-    "mqtt": "^5.14.1"
+    "mqtt": "^5.14.1",
+    "tsx": "^4.20.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/express": "^4.17.23"
   }
 }
