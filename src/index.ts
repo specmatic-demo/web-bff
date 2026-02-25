@@ -8,62 +8,28 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { buildSchema } from 'graphql';
 import { createHandler } from 'graphql-http/lib/use/express';
 import mqtt from 'mqtt';
+import type {
+  CustomerRecord,
+  DependencyErrorContext,
+  GraphQLCancelOrderArgs,
+  GraphQLCatalogItemsArgs,
+  GraphQLCustomerArgs,
+  GraphQLOrderArgs,
+  GraphQLOrdersArgs,
+  GraphQLPlaceOrderArgs,
+  GraphQLQuotePriceArgs,
+  GraphQLRequestRefundArgs,
+  JsonObject,
+  OrderRecord,
+  PlaceOrderInput,
+  QuotePriceRequest,
+  QuotePriceResponse,
+  UserNotification
+} from './types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-type JsonObject = Record<string, unknown>;
-
-type DependencyErrorContext = Record<string, unknown>;
-
-type QuotePriceRequest = {
-  sku: string;
-  quantity: number;
-  customerTier: string;
-};
-
-type QuotePriceResponse = {
-  sku: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  currency: string;
-};
-
-type CustomerRecord = {
-  id: string;
-  email: string;
-  tier: string;
-};
-
-type PlaceOrderInput = {
-  customerId: string;
-  sku: string;
-  quantity: number;
-  paymentMethodId: string;
-};
-
-type OrderRecord = {
-  id: string;
-  status: string;
-};
-
-type UserNotification = {
-  notificationId: string;
-  requestId: string;
-  title: string;
-  body: string;
-  priority: 'LOW' | 'NORMAL' | 'HIGH';
-};
-
-type GraphQLCustomerArgs = { id: string };
-type GraphQLCatalogItemsArgs = { category?: string | null; limit?: number | null };
-type GraphQLOrderArgs = { id: string };
-type GraphQLQuotePriceArgs = { sku: string; quantity: number };
-type GraphQLPlaceOrderArgs = { input: PlaceOrderInput };
-type GraphQLOrdersArgs = { customerId: string; status?: string | null; from?: string | null; to?: string | null };
-type GraphQLCancelOrderArgs = { orderId: string; reason?: string | null };
-type GraphQLRequestRefundArgs = { paymentId: string; amount: number; reason: string };
 const orderStatusValues = new Set(['PENDING_PAYMENT', 'CONFIRMED', 'SHIPPED', 'CANCELLED']);
 
 function findFirstExistingPath(paths: Array<string | undefined>): string | null {
@@ -160,7 +126,7 @@ function logDependencyError(
   error: unknown,
   context: DependencyErrorContext = {}
 ): void {
-  const message = error && error.message ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
   console.error(
     `[dependency-error] dependency=${dependency} endpoint=${endpoint} message="${message}" context=${JSON.stringify(
       context
@@ -180,7 +146,7 @@ const pricingPackageDef = protoLoader.loadSync(pricingProtoPath, {
   oneofs: true
 });
 
-const pricingProto = grpc.loadPackageDefinition(pricingPackageDef);
+const pricingProto = grpc.loadPackageDefinition(pricingPackageDef) as any;
 const PricingServiceClient = pricingProto.pricing.v1.PricingService;
 const pricingClient = new PricingServiceClient(config.pricingServiceAddress, grpc.credentials.createInsecure());
 
@@ -382,10 +348,11 @@ const rootValue = {
       { method: 'GET' }
     );
 
+    const customerTier = typeof customer.tier === 'string' ? customer.tier : 'STANDARD';
     const quote = await quotePriceGrpc({
       sku: input.sku,
       quantity: input.quantity,
-      customerTier: customer.tier || 'STANDARD'
+      customerTier
     });
 
     const order = await httpJson(`${config.orderServiceBaseUrl}/orders`, {
@@ -403,17 +370,19 @@ const rootValue = {
       })
     });
 
+    const orderId = typeof order.id === 'string' ? order.id : randomUUID();
+    const orderStatus = typeof order.status === 'string' ? order.status : 'PENDING_PAYMENT';
     await publishUserNotification({
       notificationId: randomUUID(),
-      requestId: order.id,
+      requestId: orderId,
       title: 'Order placed',
-      body: `Order ${order.id} was placed with status ${order.status}`,
+      body: `Order ${orderId} was placed with status ${orderStatus}`,
       priority: 'NORMAL'
     });
 
     return {
-      orderId: order.id,
-      status: order.status
+      orderId,
+      status: orderStatus
     };
   },
 

@@ -5,7 +5,9 @@
   "description": "Node.js GraphQL BFF composed from Specmatic dependency contracts",
   "main": "src/index.ts",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "engines": {
     "node": ">=18"
@@ -23,6 +25,7 @@
     "@types/express": "^4.17.25",
     "@types/graphql": "^14.2.3",
     "@types/mqtt": "^0.0.34",
-    "@types/node": "^24.3.0"
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
   }
 }
