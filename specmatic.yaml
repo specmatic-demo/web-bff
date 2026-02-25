@@ -87,7 +87,7 @@ components:
               $ref: "#/components/sources/centralContractRepo"
             specs:
               - spec:
-                  path: "contracts/services/notification-service/events/mqtt-asyncapi.yaml"
+                  path: "contracts/services/notification-service/events/asyncapi.yaml"
   runOptions:
     customerServiceMock:
       openapi:
