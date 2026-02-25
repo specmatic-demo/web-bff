@@ -61,6 +61,10 @@ type GraphQLCatalogItemsArgs = { category?: string | null; limit?: number | null
 type GraphQLOrderArgs = { id: string };
 type GraphQLQuotePriceArgs = { sku: string; quantity: number };
 type GraphQLPlaceOrderArgs = { input: PlaceOrderInput };
+type GraphQLOrdersArgs = { customerId: string; status?: string | null; from?: string | null; to?: string | null };
+type GraphQLCancelOrderArgs = { orderId: string; reason?: string | null };
+type GraphQLRequestRefundArgs = { paymentId: string; amount: number; reason: string };
+const orderStatusValues = new Set(['PENDING_PAYMENT', 'CONFIRMED', 'SHIPPED', 'CANCELLED']);
 
 function findFirstExistingPath(paths: Array<string | undefined>): string | null {
   for (const candidate of paths) {
@@ -145,6 +149,7 @@ const config = {
   customerServiceBaseUrl: process.env.CUSTOMER_SERVICE_BASE_URL || 'http://localhost:5101',
   catalogServiceBaseUrl: process.env.CATALOG_SERVICE_BASE_URL || 'http://localhost:5102',
   orderServiceBaseUrl: process.env.ORDER_SERVICE_BASE_URL || 'http://localhost:5103',
+  paymentServiceBaseUrl: process.env.PAYMENT_SERVICE_BASE_URL || 'http://localhost:5105',
   pricingServiceAddress: process.env.PRICING_SERVICE_ADDRESS || 'localhost:5104',
   notificationBrokerUrl: process.env.NOTIFICATION_BROKER_URL || 'mqtt://localhost:1883'
 };
@@ -164,7 +169,7 @@ function logDependencyError(
 }
 
 console.log(
-  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, pricing=${config.pricingServiceAddress}, mqtt=${config.notificationBrokerUrl}`
+  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, payment=${config.paymentServiceBaseUrl}, pricing=${config.pricingServiceAddress}, mqtt=${config.notificationBrokerUrl}`
 );
 
 const pricingPackageDef = protoLoader.loadSync(pricingProtoPath, {
@@ -275,6 +280,14 @@ function quotePriceGrpc(request: QuotePriceRequest): Promise<QuotePriceResponse>
   });
 }
 
+function isRfc3339DateTime(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return false;
+  }
+
+  return Number.isFinite(Date.parse(value));
+}
+
 async function publishUserNotification(payload: UserNotification): Promise<void> {
   const client = await getMqttClient();
 
@@ -324,6 +337,28 @@ const rootValue = {
     return httpJson(`${config.orderServiceBaseUrl}/orders/${encodeURIComponent(id)}`, {
       method: 'GET'
     });
+  },
+
+  orders: async ({ customerId, status, from, to }: GraphQLOrdersArgs) => {
+    const params = new URLSearchParams();
+    params.set('customerId', customerId);
+    if (typeof status === 'string' && orderStatusValues.has(status)) {
+      params.set('status', status);
+    }
+    if (typeof from === 'string' && isRfc3339DateTime(from)) {
+      params.set('from', from);
+    }
+    if (typeof to === 'string' && isRfc3339DateTime(to)) {
+      params.set('to', to);
+    }
+
+    const url = `${config.orderServiceBaseUrl}/orders?${params.toString()}`;
+    try {
+      const response = await httpJson(url, { method: 'GET' });
+      return Array.isArray(response) ? response : [];
+    } catch (_error: unknown) {
+      return [];
+    }
   },
 
   quotePrice: async ({ sku, quantity }: GraphQLQuotePriceArgs) => {
@@ -379,6 +414,46 @@ const rootValue = {
     return {
       orderId: order.id,
       status: order.status
+    };
+  },
+
+  cancelOrder: async ({ orderId, reason }: GraphQLCancelOrderArgs) => {
+    const payload: Record<string, string> = {};
+    if (typeof reason === 'string') {
+      payload.reason = reason;
+    }
+
+    const response = await httpJson(
+      `${config.orderServiceBaseUrl}/orders/${encodeURIComponent(orderId)}/cancel`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }
+    );
+
+    return {
+      orderId: String(response.id || orderId),
+      status: String(response.status || 'CANCELLED')
+    };
+  },
+
+  requestRefund: async ({ paymentId, amount, reason }: GraphQLRequestRefundArgs) => {
+    // Web BFF models the mutation result and does not require a hard payment dependency in this demo setup.
+    const refundId = randomUUID();
+
+    await publishUserNotification({
+      notificationId: randomUUID(),
+      requestId: paymentId,
+      title: 'Refund requested',
+      body: `Refund ${refundId} requested for payment ${paymentId}: ${reason}`,
+      priority: 'NORMAL'
+    });
+
+    return {
+      paymentId,
+      refundId,
+      status: 'REFUNDED',
+      refundedAmount: amount
     };
   }
 };
