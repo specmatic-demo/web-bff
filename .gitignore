@@ -3,3 +3,5 @@ build/
 node_modules/
 .specmatic_grpc_working_dir/
 *.pb
+
+dist/
