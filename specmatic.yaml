@@ -28,6 +28,10 @@ dependencies:
         $ref: "#/components/services/notificationService"
         runOptions:
           $ref: "#/components/runOptions/notificationServiceMock"
+    - service:
+        $ref: "#/components/services/returnsService"
+        runOptions:
+          $ref: "#/components/runOptions/returnsServiceMock"
 components:
   sources:
     centralContractRepo:
@@ -88,6 +92,15 @@ components:
             specs:
               - spec:
                   path: "contracts/services/notification-service/events/asyncapi.yaml"
+    returnsService:
+      description: "Returns Service dependency"
+      definitions:
+        - definition:
+            source:
+              $ref: "#/components/sources/centralContractRepo"
+            specs:
+              - spec:
+                  path: "contracts/services/returns-service/http/openapi.yaml"
   runOptions:
     customerServiceMock:
       openapi:
@@ -116,3 +129,8 @@ components:
         servers:
           - host: tcp://0.0.0.0:1883
             protocol: mqtt
+    returnsServiceMock:
+      openapi:
+        type: mock
+        port: 5105
+        host: localhost

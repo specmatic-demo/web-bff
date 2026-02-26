@@ -17,6 +17,7 @@ import type {
   GraphQLOrderArgs,
   GraphQLOrdersArgs,
   GraphQLPlaceOrderArgs,
+  GraphQLScheduleReturnArgs,
   GraphQLQuotePriceArgs,
   GraphQLRequestRefundArgs,
   JsonObject,
@@ -115,6 +116,7 @@ const config = {
   customerServiceBaseUrl: process.env.CUSTOMER_SERVICE_BASE_URL || 'http://localhost:5101',
   catalogServiceBaseUrl: process.env.CATALOG_SERVICE_BASE_URL || 'http://localhost:5102',
   orderServiceBaseUrl: process.env.ORDER_SERVICE_BASE_URL || 'http://localhost:5103',
+  returnsServiceBaseUrl: process.env.RETURNS_SERVICE_BASE_URL || 'http://localhost:5105',
   paymentServiceBaseUrl: process.env.PAYMENT_SERVICE_BASE_URL || 'http://localhost:5105',
   pricingServiceAddress: process.env.PRICING_SERVICE_ADDRESS || 'localhost:5104',
   notificationBrokerUrl: process.env.NOTIFICATION_BROKER_URL || 'mqtt://localhost:1883'
@@ -135,7 +137,7 @@ function logDependencyError(
 }
 
 console.log(
-  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, payment=${config.paymentServiceBaseUrl}, pricing=${config.pricingServiceAddress}, mqtt=${config.notificationBrokerUrl}`
+  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, returns=${config.returnsServiceBaseUrl}, payment=${config.paymentServiceBaseUrl}, pricing=${config.pricingServiceAddress}, mqtt=${config.notificationBrokerUrl}`
 );
 
 const pricingPackageDef = protoLoader.loadSync(pricingProtoPath, {
@@ -423,6 +425,33 @@ const rootValue = {
       refundId,
       status: 'REFUNDED',
       refundedAmount: amount
+    };
+  },
+
+  scheduleReturn: async ({ input }: GraphQLScheduleReturnArgs) => {
+    const response = await httpJson(`${config.returnsServiceBaseUrl}/returns`, {
+      method: 'POST',
+      body: JSON.stringify({
+        requestId: randomUUID(),
+        orderId: input.orderId,
+        customerId: input.customerId,
+        items: [
+          {
+            sku: input.sku,
+            quantity: input.quantity,
+            reasonCode: input.reasonCode
+          }
+        ],
+        requestedAt: new Date().toISOString()
+      })
+    });
+
+    return {
+      returnId: String(response.returnId || randomUUID()),
+      status: String(response.status || 'PENDING_REVIEW'),
+      updatedAt: String(response.updatedAt || new Date().toISOString()),
+      refundAmount:
+        typeof response.refundAmount === 'number' ? response.refundAmount : null
     };
   }
 };
