@@ -429,6 +429,10 @@ const rootValue = {
   },
 
   scheduleReturn: async ({ input }: GraphQLScheduleReturnArgs) => {
+    const allowedReasonCodes = new Set(['DAMAGED', 'DEFECTIVE', 'WRONG_ITEM', 'NO_LONGER_NEEDED']);
+    const normalizedReasonCode = allowedReasonCodes.has(input.reasonCode) ? input.reasonCode : 'DAMAGED';
+    const normalizedQuantity = Number.isInteger(input.quantity) && input.quantity > 0 ? input.quantity : 1;
+
     const response = await httpJson(`${config.returnsServiceBaseUrl}/returns`, {
       method: 'POST',
       body: JSON.stringify({
@@ -438,8 +442,8 @@ const rootValue = {
         items: [
           {
             sku: input.sku,
-            quantity: input.quantity,
-            reasonCode: input.reasonCode
+            quantity: normalizedQuantity,
+            reasonCode: normalizedReasonCode
           }
         ],
         requestedAt: new Date().toISOString()
