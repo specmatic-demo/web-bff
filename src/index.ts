@@ -7,7 +7,7 @@ import * as protoLoader from '@grpc/proto-loader';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { buildSchema } from 'graphql';
 import { createHandler } from 'graphql-http/lib/use/express';
-import mqtt from 'mqtt';
+import { Kafka, type Producer } from 'kafkajs';
 import type {
   CustomerRecord,
   DependencyErrorContext,
@@ -119,7 +119,10 @@ const config = {
   returnsServiceBaseUrl: process.env.RETURNS_SERVICE_BASE_URL || 'http://localhost:5105',
   paymentServiceBaseUrl: process.env.PAYMENT_SERVICE_BASE_URL || 'http://localhost:5105',
   pricingServiceAddress: process.env.PRICING_SERVICE_ADDRESS || 'localhost:5104',
-  notificationBrokerUrl: process.env.NOTIFICATION_BROKER_URL || 'mqtt://localhost:1883'
+  notificationKafkaBrokers: (process.env.NOTIFICATION_KAFKA_BROKERS || 'localhost:9092')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
 };
 
 function logDependencyError(
@@ -137,7 +140,7 @@ function logDependencyError(
 }
 
 console.log(
-  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, returns=${config.returnsServiceBaseUrl}, payment=${config.paymentServiceBaseUrl}, pricing=${config.pricingServiceAddress}, mqtt=${config.notificationBrokerUrl}`
+  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, returns=${config.returnsServiceBaseUrl}, payment=${config.paymentServiceBaseUrl}, pricing=${config.pricingServiceAddress}, kafka=${config.notificationKafkaBrokers.join(',')}`
 );
 
 const pricingPackageDef = protoLoader.loadSync(pricingProtoPath, {
@@ -151,45 +154,21 @@ const pricingPackageDef = protoLoader.loadSync(pricingProtoPath, {
 const pricingProto = grpc.loadPackageDefinition(pricingPackageDef) as any;
 const PricingServiceClient = pricingProto.pricing.v1.PricingService;
 const pricingClient = new PricingServiceClient(config.pricingServiceAddress, grpc.credentials.createInsecure());
+const notificationKafka = new Kafka({
+  clientId: 'web-bff-notification',
+  brokers: config.notificationKafkaBrokers
+});
+const notificationProducer: Producer = notificationKafka.producer();
+let notificationProducerConnected = false;
 
-let mqttClient: mqtt.MqttClient | undefined;
-let mqttReadyPromise: Promise<mqtt.MqttClient> | undefined;
-
-function getMqttClient(): Promise<mqtt.MqttClient> {
-  if (mqttClient) {
-    return Promise.resolve(mqttClient);
+async function ensureNotificationProducerConnected(): Promise<void> {
+  if (notificationProducerConnected) {
+    return;
   }
 
-  if (mqttReadyPromise) {
-    return mqttReadyPromise;
-  }
-
-  mqttReadyPromise = new Promise((resolve, reject) => {
-    const client = mqtt.connect(config.notificationBrokerUrl);
-
-    client.on('reconnect', () => {
-      console.warn(`[dependency-warning] dependency=notificationService endpoint=${config.notificationBrokerUrl} reconnecting`);
-    });
-
-    client.on('offline', () => {
-      console.warn(`[dependency-warning] dependency=notificationService endpoint=${config.notificationBrokerUrl} offline`);
-    });
-
-    client.once('connect', () => {
-      console.log(`[dependency-connected] dependency=notificationService endpoint=${config.notificationBrokerUrl}`);
-      mqttClient = client;
-      resolve(client);
-    });
-
-    client.once('error', (error: Error) => {
-      logDependencyError('notificationService', config.notificationBrokerUrl, error, {
-        phase: 'connect'
-      });
-      reject(error);
-    });
-  });
-
-  return mqttReadyPromise;
+  await notificationProducer.connect();
+  notificationProducerConnected = true;
+  console.log(`[dependency-connected] dependency=notificationService endpoint=${config.notificationKafkaBrokers.join(',')}`);
 }
 
 async function httpJson(url: string, options: RequestInit = {}): Promise<JsonObject> {
@@ -257,23 +236,11 @@ function isRfc3339DateTime(value: string): boolean {
 }
 
 async function publishUserNotification(payload: UserNotification): Promise<void> {
-  const client = await getMqttClient();
-
-  return new Promise((resolve, reject) => {
-    console.log(`[publish-notification] requestId=${payload.requestId} title="${payload.title}" body="${payload.body}" priority=${payload.priority}`);
-    client.publish('notification/user', JSON.stringify(payload), { qos: 1 }, (error?: Error) => {
-      if (error) {
-        logDependencyError('notificationService', config.notificationBrokerUrl, error, {
-          phase: 'publish',
-          topic: 'notification/user',
-          requestId: payload.requestId
-        });
-        reject(error);
-        return;
-      }
-
-      resolve();
-    });
+  await ensureNotificationProducerConnected();
+  console.log(`[publish-notification] requestId=${payload.requestId} title="${payload.title}" body="${payload.body}" priority=${payload.priority}`);
+  await notificationProducer.send({
+    topic: 'notification.user',
+    messages: [{ key: payload.requestId, value: JSON.stringify(payload) }]
   });
 }
 
@@ -497,10 +464,7 @@ const server = app.listen(config.port, config.host, () => {
 
 function shutdown() {
   server.close(() => {
-    if (mqttClient) {
-      mqttClient.end(true);
-    }
-
+    void notificationProducer.disconnect().catch(() => undefined);
     pricingClient.close();
     process.exit(0);
   });
