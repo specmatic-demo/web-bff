@@ -5,3 +5,4 @@ node_modules/
 *.pb
 
 dist/
+logs/
