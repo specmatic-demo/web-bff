@@ -37,6 +37,9 @@ components:
     centralContractRepo:
       git:
         url: https://github.com/specmatic-demo/central-contract-repository
+    localSpecs:
+      filesystem:
+        directory: specs
     pricingServiceRepo:
       git:
         url: https://github.com/specmatic-demo/pricing-service
@@ -47,10 +50,10 @@ components:
       definitions:
         - definition:
             source:
-              $ref: "#/components/sources/centralContractRepo"
+              $ref: "#/components/sources/localSpecs"
             specs:
               - spec:
-                  path: "contracts/services/web-bff/graphql/schema.graphql"
+                  path: "schema.graphql"
     customerService:
       description: "Customer Service dependency"
       definitions:

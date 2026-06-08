@@ -48,6 +48,12 @@ const schemaPath = findFirstExistingPath([
   path.join(
     __dirname,
     '..',
+    'specs',
+    'schema.graphql'
+  ),
+  path.join(
+    __dirname,
+    '..',
     '.specmatic',
     'repos',
     'central-contract-repository',

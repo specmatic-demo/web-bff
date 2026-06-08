@@ -1,8 +1,8 @@
 # web-bff
 
-This repository provides its GraphQL contract from the central contract repository:
+This is a federated provider repository.
 
-- `contracts/services/web-bff/graphql/schema.graphql`
+It provides the GraphQL contract stored at [specs/schema.graphql](/Users/jaydeep/znsio/specmatic-demo/web-bff/specs/schema.graphql).
 
 It consumes the following dependencies:
 
@@ -59,6 +59,42 @@ docker run --rm -it \
 The generated reports will be written under:
 
 - `build/reports/specmatic`
+
+## Generate the central contract repo report
+
+Run this from the `web-bff` repository root:
+
+```bash
+docker run -it \
+  -v "$(pwd):/usr/src/app" \
+  -v ~/.specmatic:/root/.specmatic \
+  -w /usr/src/app/specs \
+  --network=host \
+  specmatic/specmatic \
+  central-contract-repo-report
+```
+
+Expected output file:
+
+- `specs/build/reports/specmatic/central_contract_repo_report.json`
+
+## Send the central contract repo report to Insights
+
+Run this from the `web-bff` repository root:
+
+```bash
+docker run -it \
+  -v "$(pwd):/usr/src/app" \
+  -v ~/.specmatic:/root/.specmatic \
+  -w /usr/src/app/specs \
+  --network=host \
+  specmatic/specmatic \
+  send-report \
+  --branch-name=main \
+  --repo-name="$(gh repo view --json name -q .name)" \
+  --repo-id="$(gh api 'repos/{owner}/{repo}' --jq .id)" \
+  --repo-url="$(gh repo view --json url --jq .url)"
+```
 
 ## Send the service test report to Insights
 
