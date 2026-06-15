@@ -1,0 +1,85 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  customer(id: String!): Customer
+  catalogItems(category: String, limit: Int = 10): [CatalogItem!]!
+  order(id: String!): Order
+  orders(customerId: String!, status: String, from: String, to: String): [Order!]!
+  quotePrice(sku: String!, quantity: Int!): PriceQuote!
+}
+
+type Mutation {
+  placeOrder(input: PlaceOrderInput!): PlaceOrderResult!
+  cancelOrder(orderId: String!, reason: String): CancelOrderResult!
+  requestRefund(paymentId: String!, amount: Float!, reason: String!): RefundResult!
+  scheduleReturn(input: ScheduleReturnInput!): ScheduleReturnResult!
+}
+
+type Customer {
+  id: ID!
+  email: String!
+  tier: String!
+}
+
+type CatalogItem {
+  sku: String!
+  name: String!
+  available: Boolean!
+  listPrice: Float!
+}
+
+type Order {
+  id: ID!
+  customerId: String!
+  status: String!
+  totalAmount: Float!
+}
+
+type PriceQuote {
+  sku: String!
+  quantity: Int!
+  unitPrice: Float!
+  totalPrice: Float!
+}
+
+input PlaceOrderInput {
+  customerId: String!
+  sku: String!
+  quantity: Int!
+  paymentMethodId: String!
+}
+
+type PlaceOrderResult {
+  orderId: ID!
+  status: String!
+}
+
+type CancelOrderResult {
+  orderId: ID!
+  status: String!
+}
+
+type RefundResult {
+  paymentId: ID!
+  refundId: ID!
+  status: String!
+  refundedAmount: Float!
+}
+
+input ScheduleReturnInput {
+  orderId: String!
+  customerId: String!
+  sku: String!
+  quantity: Int!
+  reasonCode: String!
+}
+
+type ScheduleReturnResult {
+  returnId: ID!
+  status: String!
+  updatedAt: String!
+  refundAmount: Float
+}

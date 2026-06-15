@@ -48,6 +48,12 @@ const schemaPath = findFirstExistingPath([
   path.join(
     __dirname,
     '..',
+    'specs',
+    'schema.graphql'
+  ),
+  path.join(
+    __dirname,
+    '..',
     '.specmatic',
     'repos',
     'central-contract-repository',
@@ -83,11 +89,28 @@ const pricingProtoPath = findFirstExistingPath([
     '..',
     '.specmatic',
     'repos',
+    'pricing-service',
+    'specs',
+    'pricing.proto'
+  ),
+  path.join(
+    __dirname,
+    '..',
+    '.specmatic',
+    'repos',
     'central-contract-repository',
     'contracts',
     'services',
     'pricing-service',
     'rpc',
+    'pricing.proto'
+  ),
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'pricing-service',
+    'specs',
     'pricing.proto'
   ),
   path.join(

@@ -37,16 +37,28 @@ components:
     centralContractRepo:
       git:
         url: https://github.com/specmatic-demo/central-contract-repository
+    catalogServiceRepo:
+      git:
+        url: https://github.com/specmatic-demo/catalog-service
+    notificationServiceRepo:
+      git:
+        url: https://github.com/specmatic-demo/notification-service
+    localSpecs:
+      filesystem:
+        directory: specs
+    pricingServiceRepo:
+      git:
+        url: https://github.com/specmatic-demo/pricing-service
   services:
     webBff:
       description: "Web BFF"
       definitions:
         - definition:
             source:
-              $ref: "#/components/sources/centralContractRepo"
+              $ref: "#/components/sources/localSpecs"
             specs:
               - spec:
-                  path: "contracts/services/web-bff/graphql/schema.graphql"
+                  path: "schema.graphql"
     customerService:
       description: "Customer Service dependency"
       definitions:
@@ -61,10 +73,10 @@ components:
       definitions:
         - definition:
             source:
-              $ref: "#/components/sources/centralContractRepo"
+              $ref: "#/components/sources/catalogServiceRepo"
             specs:
               - spec:
-                  path: "contracts/services/catalog-service/http/openapi.yaml"
+                  path: "specs/openapi.yaml"
     orderService:
       description: "Order Service dependency"
       definitions:
@@ -79,19 +91,19 @@ components:
       definitions:
         - definition:
             source:
-              $ref: "#/components/sources/centralContractRepo"
+              $ref: "#/components/sources/pricingServiceRepo"
             specs:
               - spec:
-                  path: "contracts/services/pricing-service/rpc/pricing.proto"
+                  path: "specs/pricing.proto"
     notificationService:
       description: "Notification Service dependency"
       definitions:
         - definition:
             source:
-              $ref: "#/components/sources/centralContractRepo"
+              $ref: "#/components/sources/notificationServiceRepo"
             specs:
               - spec:
-                  path: "contracts/services/notification-service/events/asyncapi.yaml"
+                  path: "specs/asyncapi.yaml"
     returnsService:
       description: "Returns Service dependency"
       definitions:
@@ -127,7 +139,7 @@ components:
       asyncapi:
         type: mock
         servers:
-          - host: tcp://0.0.0.0:1883
+          - host: tcp://localhost:9092
             protocol: kafka
     returnsServiceMock:
       openapi:
