@@ -40,18 +40,15 @@ components:
     catalogServiceRepo:
       git:
         url: https://github.com/specmatic-demo/catalog-service
-        branch: migrated_to_federated_repo
     notificationServiceRepo:
       git:
         url: https://github.com/specmatic-demo/notification-service
-        branch: migrated_to_federated_repo
     localSpecs:
       filesystem:
         directory: specs
     pricingServiceRepo:
       git:
         url: https://github.com/specmatic-demo/pricing-service
-        branch: migrated_to_federated_repo
   services:
     webBff:
       description: "Web BFF"
