@@ -52,6 +52,7 @@ export type UserNotification = {
 
 export type GraphQLCustomerArgs = { id: string };
 export type GraphQLCatalogItemsArgs = { category?: string | null; limit?: number | null };
+export type GraphQLCatalogItemBySkuArgs = { sku: string };
 export type GraphQLOrderArgs = { id: string };
 export type GraphQLQuotePriceArgs = { sku: string; quantity: number };
 export type GraphQLPlaceOrderArgs = { input: PlaceOrderInput };

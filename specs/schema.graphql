@@ -6,6 +6,7 @@ schema {
 type Query {
   customer(id: String!): Customer
   catalogItems(category: String, limit: Int = 10): [CatalogItem!]!
+  catalogItemBySku(sku: String!): CatalogItem
   order(id: String!): Order
   orders(customerId: String!, status: String, from: String, to: String): [Order!]!
   quotePrice(sku: String!, quantity: Int!): PriceQuote!

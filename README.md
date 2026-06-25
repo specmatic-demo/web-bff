@@ -7,10 +7,10 @@ It provides the GraphQL contract stored at [specs/schema.graphql](/Users/jaydeep
 It consumes the following dependencies:
 
 - `customer-service` from the central contract repository
-- `catalog-service` from the `migrated_to_federated_repo` branch of `https://github.com/specmatic-demo/catalog-service`
+- `catalog-service` from `https://github.com/specmatic-demo/catalog-service` via both OpenAPI and GraphQL
 - `order-service` from the central contract repository
-- `pricing-service` from the `migrated_to_federated_repo` branch of `https://github.com/specmatic-demo/pricing-service`
-- `notification-service` from the `migrated_to_federated_repo` branch of `https://github.com/specmatic-demo/notification-service`
+- `pricing-service` from `https://github.com/specmatic-demo/pricing-service`
+- `notification-service` from `https://github.com/specmatic-demo/notification-service`
 - `returns-service` from the central contract repository
 
 ## Run the service
@@ -40,8 +40,11 @@ docker run --rm -it \
   mock
 ```
 
-This starts mocks for all dependencies in [specmatic.yaml](/Users/jaydeep/znsio/specmatic-demo/web-bff/specmatic.yaml), including the federated `pricing-service` gRPC dependency.
-It also uses the federated `catalog-service` and `notification-service` dependencies.
+This starts mocks for all dependencies in [specmatic.yaml](/Users/jaydeep/znsio/specmatic-demo/web-bff/specmatic.yaml), including:
+
+- `catalog-service` over both OpenAPI and GraphQL
+- the federated `pricing-service` gRPC dependency
+- the federated `notification-service` async dependency
 
 ## Run contract tests
 

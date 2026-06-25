@@ -13,6 +13,7 @@ import type {
   DependencyErrorContext,
   GraphQLCancelOrderArgs,
   GraphQLCatalogItemsArgs,
+  GraphQLCatalogItemBySkuArgs,
   GraphQLCustomerArgs,
   GraphQLOrderArgs,
   GraphQLOrdersArgs,
@@ -138,6 +139,7 @@ const config = {
   port: Number.parseInt(process.env.BFF_PORT || '4000', 10),
   customerServiceBaseUrl: process.env.CUSTOMER_SERVICE_BASE_URL || 'http://localhost:5101',
   catalogServiceBaseUrl: process.env.CATALOG_SERVICE_BASE_URL || 'http://localhost:5102',
+  catalogServiceGraphqlUrl: process.env.CATALOG_SERVICE_GRAPHQL_URL || 'http://localhost:5106/graphql',
   orderServiceBaseUrl: process.env.ORDER_SERVICE_BASE_URL || 'http://localhost:5103',
   returnsServiceBaseUrl: process.env.RETURNS_SERVICE_BASE_URL || 'http://localhost:5105',
   paymentServiceBaseUrl: process.env.PAYMENT_SERVICE_BASE_URL || 'http://localhost:5105',
@@ -163,7 +165,7 @@ function logDependencyError(
 }
 
 console.log(
-  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, order=${config.orderServiceBaseUrl}, returns=${config.returnsServiceBaseUrl}, payment=${config.paymentServiceBaseUrl}, pricing=${config.pricingServiceAddress}, kafka=${config.notificationKafkaBrokers.join(',')}`
+  `Dependency configuration: customer=${config.customerServiceBaseUrl}, catalog=${config.catalogServiceBaseUrl}, catalogGraphql=${config.catalogServiceGraphqlUrl}, order=${config.orderServiceBaseUrl}, returns=${config.returnsServiceBaseUrl}, payment=${config.paymentServiceBaseUrl}, pricing=${config.pricingServiceAddress}, kafka=${config.notificationKafkaBrokers.join(',')}`
 );
 
 const pricingPackageDef = protoLoader.loadSync(pricingProtoPath, {
@@ -233,6 +235,27 @@ async function httpJson(url: string, options: RequestInit = {}): Promise<JsonObj
   return response.json();
 }
 
+async function graphqlJson(url: string, query: string, variables: Record<string, unknown>): Promise<JsonObject> {
+  const response = await httpJson(url, {
+    method: 'POST',
+    body: JSON.stringify({ query, variables })
+  });
+
+  const errors = Array.isArray(response.errors) ? response.errors : [];
+  if (errors.length > 0) {
+    const messages = errors
+      .map((entry) => (entry && typeof entry === 'object' && typeof entry.message === 'string' ? entry.message : 'Unknown GraphQL error'))
+      .join('; ');
+    throw new Error(`GraphQL dependency call failed for ${url}: ${messages}`);
+  }
+
+  if (!response.data || typeof response.data !== 'object') {
+    throw new Error(`GraphQL dependency call returned no data for ${url}`);
+  }
+
+  return response.data as JsonObject;
+}
+
 function quotePriceGrpc(request: QuotePriceRequest): Promise<QuotePriceResponse> {
   return new Promise((resolve, reject) => {
     pricingClient.quotePrice(request, (error: Error | null, response: QuotePriceResponse) => {
@@ -289,6 +312,23 @@ const rootValue = {
 
     const url = `${config.catalogServiceBaseUrl}/catalog/items?${params.toString()}`;
     return httpJson(url, { method: 'GET' });
+  },
+
+  catalogItemBySku: async ({ sku }: GraphQLCatalogItemBySkuArgs) => {
+    const data = await graphqlJson(
+      config.catalogServiceGraphqlUrl,
+      `query CatalogItemBySku($sku: String!) {
+        catalogItemBySku(sku: $sku) {
+          sku
+          name
+          available
+          listPrice
+        }
+      }`,
+      { sku }
+    );
+
+    return data.catalogItemBySku ?? null;
   },
 
   order: async ({ id }: GraphQLOrderArgs) => {

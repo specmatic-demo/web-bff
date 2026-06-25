@@ -40,6 +40,7 @@ components:
     catalogServiceRepo:
       git:
         url: https://github.com/specmatic-demo/catalog-service
+        branch: main
     notificationServiceRepo:
       git:
         url: https://github.com/specmatic-demo/notification-service
@@ -77,6 +78,8 @@ components:
             specs:
               - spec:
                   path: "specs/openapi.yaml"
+              - spec:
+                  path: "specs/schema.graphql"
     orderService:
       description: "Order Service dependency"
       definitions:
@@ -124,6 +127,10 @@ components:
         type: mock
         port: 5102
         host: localhost
+      graphqlsdl:
+        type: mock
+        host: localhost
+        port: 5106
     orderServiceMock:
       openapi:
         type: mock
